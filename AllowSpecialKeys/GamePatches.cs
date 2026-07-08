@@ -12,18 +12,19 @@ internal static class GamePatches
     private static bool _patchesApplied;
     private static FieldInfo _asyncLabelField;
 
-    // ---- 物理键跟踪（所有被钩子条件拦截的键） ----
+    // ---- 物理键跟踪（只跟踪需要修复的键，不包括 Escape） ----
     private static int _lastSampleFrame = -1;
     private static readonly Dictionary<int, bool> _rawDown = new();
     private static readonly Dictionary<int, bool> _prevDown = new();
 
+    // 只跟踪可能被钩子条件拦截且需要恢复游戏输入的键
     private static readonly int[] TrackedVks =
     {
         VK_LWIN, VK_RWIN,
-        VK_RETURN,   // Enter (Alt+Enter)
-        VK_TAB,      // Alt+Tab
-        VK_F4,       // Alt+F4
-        VK_ESCAPE,   // Alt+Esc / Ctrl+Esc
+        VK_RETURN,
+        VK_TAB,
+        VK_F4,
+        // Escape 不跟踪，因为不对其做任何修正
     };
 
     public static void Register()
@@ -32,26 +33,29 @@ internal static class GamePatches
 
         var harmony = Main.Harmony;
 
-        // ========== 原有补丁（保持不变） ==========
         PatchGetSpecialInput(harmony);
         PatchAsyncMain(harmony);
         PatchCountSpecialInput(harmony);
         PatchKeyboardMainIgnoreActive(harmony);
         TryPatchKeyViewer(harmony);
 
-        // ========== ★ 新增：修补 RDInputType_Keyboard.CheckKeyState ==========
-        PatchCheckKeyState(harmony);
+        // 修补 CheckKeyState，但只处理特定键，Escape 走原始逻辑
+        PatchKeyboardCheckKeyState(harmony);
+        // 异步的 CheckKeyState 我们不需要修补，因为异步模式不依赖消息，
+        // 且我们没有修复异步模式下的任何键，所以跳过，避免干扰。
+        // 如果需要修复异步模式下的某些键，可以添加，但 Escape 不处理。
 
         _asyncLabelField = AccessTools.Field(typeof(AsyncKeyCode), "label");
         _patchesApplied = true;
     }
 
-    // ---------- 各补丁注册方法 ----------
+    // ---------- 各补丁注册 ----------
     private static void PatchGetSpecialInput(Harmony harmony)
     {
-        var m = AccessTools.Method(typeof(RDInputType_AsyncKeyboard), "GetSpecialInput");
-        if (m != null)
-            harmony.Patch(m, prefix: new HarmonyMethod(typeof(GamePatches), nameof(GetSpecialInputPrefix)));
+        var getSpecialInput = AccessTools.Method(typeof(RDInputType_AsyncKeyboard), "GetSpecialInput");
+        if (getSpecialInput != null)
+            harmony.Patch(getSpecialInput,
+                postfix: new HarmonyMethod(typeof(GamePatches), nameof(GetSpecialInputPostfix)));
     }
 
     private static void PatchAsyncMain(Harmony harmony)
@@ -63,9 +67,10 @@ internal static class GamePatches
 
     private static void PatchCountSpecialInput(Harmony harmony)
     {
-        var m = AccessTools.Method(typeof(RDInputType_Keyboard), "CountSpecialInput");
-        if (m != null)
-            harmony.Patch(m, prefix: new HarmonyMethod(typeof(GamePatches), nameof(CountSpecialInputPrefix)));
+        var countSpecialInput = AccessTools.Method(typeof(RDInputType_Keyboard), "CountSpecialInput");
+        if (countSpecialInput != null)
+            harmony.Patch(countSpecialInput,
+                postfix: new HarmonyMethod(typeof(GamePatches), nameof(CountSpecialInputPostfix)));
     }
 
     private static void PatchKeyboardMainIgnoreActive(Harmony harmony)
@@ -90,10 +95,9 @@ internal static class GamePatches
         Main.Mod.Logger.Log("Patched: KeyViewer.ProcessKeySelection (Alt/Win fix)");
     }
 
-    // ---------- ★ 精确修补 RDInputType_Keyboard.CheckKeyState ----------
-    private static void PatchCheckKeyState(Harmony harmony)
+    // ---- 修补 RDInputType_Keyboard.CheckKeyState（只针对特定键，Escape 跳过） ----
+    private static void PatchKeyboardCheckKeyState(Harmony harmony)
     {
-        // 方法签名：internal static bool CheckKeyState(KeyCode key, ButtonState state = ButtonState.WentDown)
         var method = AccessTools.Method(typeof(RDInputType_Keyboard), "CheckKeyState",
             new[] { typeof(KeyCode), typeof(ButtonState) });
         if (method == null)
@@ -103,8 +107,8 @@ internal static class GamePatches
         }
 
         harmony.Patch(method,
-            prefix: new HarmonyMethod(typeof(GamePatches), nameof(CheckKeyStatePrefix)));
-        Main.Mod.Logger.Log("OK: Patched RDInputType_Keyboard.CheckKeyState");
+            prefix: new HarmonyMethod(typeof(GamePatches), nameof(KeyboardCheckKeyStatePrefix)));
+        Main.Mod.Logger.Log("OK: Patched RDInputType_Keyboard.CheckKeyState (excludes Escape)");
     }
 
     public static void Unregister()
@@ -114,7 +118,7 @@ internal static class GamePatches
         _patchesApplied = false;
     }
 
-    // ======================= 物理状态采样（每帧一次） =======================
+    // ======================= 物理状态采样 =======================
     private static void SampleSpecialKeysOncePerFrame()
     {
         if (Time.frameCount == _lastSampleFrame) return;
@@ -129,20 +133,24 @@ internal static class GamePatches
         }
     }
 
-    // ======================= 各补丁方法 =======================
+    // ======================= 补丁方法 =======================
 
-    // 补丁1：GetSpecialInput 前缀
-    private static bool GetSpecialInputPrefix(ref List<AsyncKeyCode> __result)
+    private static void GetSpecialInputPostfix(ref List<AsyncKeyCode> __result)
     {
-        if (Main.Settings.AllowSpecialAsGameplay)
+        if (!Main.Settings.AllowSpecialAsGameplay) return;
+
+        // 重新构建特殊列表：只包含 Escape，以及（当不允许 F12 时）F12
+        var newList = new List<AsyncKeyCode>
         {
-            __result = new List<AsyncKeyCode>();
-            return false;
-        }
-        return true;
+            new AsyncKeyCode(KeyLabel.Escape)
+        };
+        if (!Main.Settings.AllowF12AsGameplay)
+            newList.Add(new AsyncKeyCode(KeyLabel.F12));
+
+        __result = newList;
     }
 
-    // 补丁2：AsyncKeyboard.Main 后置 (控制 F12)
+    // 补丁 2：AsyncKeyboard.Main 后置 (F12)
     private static void MainPostfix(RDInputType_AsyncKeyboard __instance, ButtonState state, ref int __result)
     {
         var keys = __instance.pressCount.keys;
@@ -167,18 +175,22 @@ internal static class GamePatches
         }
     }
 
-    // 补丁3：CountSpecialInput 前缀 (关闭特殊键过滤)
-    private static bool CountSpecialInputPrefix(ref List<KeyCode> __result)
+    // 补丁 3：CountSpecialInput 后缀
+    private static void CountSpecialInputPostfix(ref List<KeyCode> __result)
     {
-        if (Main.Settings.AllowSpecialAsGameplay)
+        if (!Main.Settings.AllowSpecialAsGameplay) return;
+
+        var newList = new List<KeyCode>
         {
-            __result = new List<KeyCode>();
-            return false;
-        }
-        return true;
+            KeyCode.Escape
+        };
+        if (!Main.Settings.AllowF12AsGameplay)
+            newList.Add(KeyCode.F12);
+
+        __result = newList;
     }
 
-    // 补丁4：Keyboard.MainIgnoreActive 后置 (注入 Win 键，作为双保险)
+    // 补丁 4：Keyboard.MainIgnoreActive 后置（注入 Win 键）
     private static void KeyboardMainPostfix(RDInputType_Keyboard __instance, ButtonState state, ref int __result)
     {
         if (!Main.Settings.AllowSpecialAsGameplay) return;
@@ -196,11 +208,7 @@ internal static class GamePatches
         }
 
         var keys = stateCount.keys;
-
-        // 去重 AltGr（如果存在双重条目）
         DedupeAltGr(keys, ref __result);
-
-        // 尝试添加左右 Win 键（如果物理状态匹配且不在列表中）
         TryAddKey(keys, VK_LWIN, KeyCode.LeftWindows, state, ref __result);
         TryAddKey(keys, VK_RWIN, KeyCode.RightWindows, state, ref __result);
     }
@@ -245,17 +253,20 @@ internal static class GamePatches
         result++;
     }
 
-    // ======================= ★ 核心补丁：RDInputType_Keyboard.CheckKeyState 前缀 =======================
-    private static bool CheckKeyStatePrefix(KeyCode key, ButtonState state, ref bool __result)
+    // ======================= ★ CheckKeyState 前缀（只处理特定键，Escape 不干预） =======================
+    private static bool KeyboardCheckKeyStatePrefix(KeyCode key, ButtonState state, ref bool __result)
     {
-        // 只有在允许特殊键作为游戏输入时才干预
-        if (!Main.Settings.AllowSpecialAsGameplay) return true;
+        // 如果是 Escape，直接跳过，让原始逻辑执行（我们不干预）
+        if (key == KeyCode.Escape)
+            return true;   // 执行原方法
 
-        // 映射 KeyCode 到虚拟键码
+        // 对于其他键，如果需要修正物理状态，则处理
+        if (!Main.Settings.AllowSpecialAsGameplay)
+            return true;   // 不修正
+
         int vk = KeyCodeToVk(key);
-        if (vk == -1) return true; // 不是我们需要处理的键
+        if (vk == -1) return true;  // 不在修复列表
 
-        // 确保物理状态已采样（带帧号防重）
         SampleSpecialKeysOncePerFrame();
 
         bool currentlyDown = _rawDown.TryGetValue(vk, out bool down) && down;
@@ -271,7 +282,7 @@ internal static class GamePatches
         };
 
         __result = result;
-        return false; // 跳过原始方法，使用我们计算的结果
+        return false; // 跳过原方法，使用我们的结果
     }
 
     // ======================= 辅助函数 =======================
@@ -284,7 +295,7 @@ internal static class GamePatches
             KeyCode.Return => VK_RETURN,
             KeyCode.Tab => VK_TAB,
             KeyCode.F4 => VK_F4,
-            KeyCode.Escape => VK_ESCAPE,
+            // Escape 不映射，因为我们直接让它走原方法
             _ => -1
         };
     }
@@ -300,7 +311,7 @@ internal static class GamePatches
         catch { return false; }
     }
 
-    // ======================= KeyViewer 兼容补丁 =======================
+    // ======================= KeyViewer 兼容 =======================
     private static bool KvProcessKeySelPrefix(object __instance, int ___SelectedKey, int ___changeState)
     {
         if (___SelectedKey == -1 || ___changeState == 1 || !Application.isFocused)
@@ -327,7 +338,6 @@ internal static class GamePatches
     private const int VK_RETURN = 0x0D;
     private const int VK_TAB = 0x09;
     private const int VK_F4 = 0x73;
-    private const int VK_ESCAPE = 0x1B;
     private const int VK_F12 = 0x7B;
 
     [DllImport("user32.dll")]
