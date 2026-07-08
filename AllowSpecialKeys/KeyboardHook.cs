@@ -14,8 +14,13 @@ namespace AllowSpecialKeys;
 /// Key insight: WH_KEYBOARD_LL runs in a global hook chain (LIFO).
 /// Our hook gets called before Windows processes the key.
 /// Returning a nonzero value (1) prevents Windows from ever seeing
-/// the key, so no system shortcut triggers. The game still receives
-/// the key via SkyHook's own WH_KEYBOARD_LL hook.
+/// the key — which also means Windows never updates the global async
+/// key-state table for that key, so GetAsyncKeyState/GetKeyState will
+/// NEVER report it as pressed anywhere else in the process (including
+/// in Unity/the game itself). Because we are the ones swallowing the
+/// key, we are also the only ones who ever get to see it — so we must
+/// record its physical down/up state ourselves, here, and expose it
+/// to the rest of the mod instead of relying on GetAsyncKeyState.
 /// </summary>
 public class KeyboardHook : IDisposable
 {
@@ -58,6 +63,25 @@ public class KeyboardHook : IDisposable
 
     private static readonly IntPtr ModuleHandle;
 
+    // ======================= Physical key-state tracking =======================
+    // Updated directly inside the hook callback for EVERY key event we see,
+    // regardless of whether we go on to block that event or not. This is the
+    // only reliable source of "is this key physically down" once we start
+    // swallowing WH_KEYBOARD_LL events for it, because GetAsyncKeyState will
+    // never see a key we've blocked.
+    private static readonly bool[] _keyPhysicallyDown = new bool[256];
+
+    /// <summary>
+    /// Returns whether the given virtual-key code is currently physically
+    /// held down, as observed directly by this hook. Safe to call from any
+    /// thread (including Unity's main thread) — reads are volatile.
+    /// </summary>
+    public static bool IsKeyPhysicallyDown(int vkCode)
+    {
+        if (vkCode < 0 || vkCode >= _keyPhysicallyDown.Length) return false;
+        return Volatile.Read(ref _keyPhysicallyDown[vkCode]);
+    }
+
     static KeyboardHook()
     {
         using var curProcess = Process.GetCurrentProcess();
@@ -98,6 +122,10 @@ public class KeyboardHook : IDisposable
         }
         _hookThread?.Join(2000);
         _hookThread = null;
+
+        // Reset tracked state so no key gets stuck "down" after the hook stops.
+        for (int i = 0; i < _keyPhysicallyDown.Length; i++)
+            Volatile.Write(ref _keyPhysicallyDown[i], false);
     }
 
     public void Dispose()
@@ -154,6 +182,12 @@ public class KeyboardHook : IDisposable
             {
                 var khs = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
                 int vkCode = (int)khs.vkCode;
+
+                // Record physical state FIRST, before any decision to block —
+                // this is the one and only place this key's state is ever
+                // observable once we swallow it below.
+                if (vkCode >= 0 && vkCode < _keyPhysicallyDown.Length)
+                    Volatile.Write(ref _keyPhysicallyDown[vkCode], isDown);
 
                 // Track modifier state
                 if (vkCode == VK_LMENU || vkCode == VK_RMENU)
