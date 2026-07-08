@@ -162,7 +162,7 @@ public static class Main
             if (focused != _wasFocused && focused)
             {
                 _wasFocused = true;
-                if (Time.unscaledTime - _lastRestartTime > 3f)
+                if (!AsyncInputManager.isActive && Time.unscaledTime - _lastRestartTime > 3f)
                 {
                     _lastRestartTime = Time.unscaledTime;
                     Main.RestartMod();
