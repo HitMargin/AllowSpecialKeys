@@ -118,12 +118,16 @@ public class KeyboardHook : IDisposable
         if (_hookId != IntPtr.Zero)
         {
             PostThreadMessage(_threadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+            UnhookWindowsHookEx(_hookId);
             _hookId = IntPtr.Zero;
         }
-        _hookThread?.Join(2000);
+
+        if (_hookThread != null && _hookThread.IsAlive)
+        {
+            _hookThread.Join(50);
+        }
         _hookThread = null;
 
-        // Reset tracked state so no key gets stuck "down" after the hook stops.
         for (int i = 0; i < _keyPhysicallyDown.Length; i++)
             Volatile.Write(ref _keyPhysicallyDown[i], false);
     }
