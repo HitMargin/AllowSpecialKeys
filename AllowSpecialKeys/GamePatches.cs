@@ -9,6 +9,7 @@ namespace AllowSpecialKeys;
 
 internal static class GamePatches
 {
+
     private static bool _patchesApplied;
     private static FieldInfo _asyncLabelField;
 
@@ -37,7 +38,6 @@ internal static class GamePatches
         PatchAsyncMain(harmony);
         PatchCountSpecialInput(harmony);
         PatchKeyboardMainIgnoreActive(harmony);
-        TryPatchKeyViewer(harmony);
 
         // 修补 CheckKeyState，但只处理特定键，Escape 走原始逻辑
         PatchKeyboardCheckKeyState(harmony);
@@ -83,16 +83,6 @@ internal static class GamePatches
         }
         else
             Main.Mod.Logger.Log("FAIL: RDInputType_Keyboard.MainIgnoreActive NOT FOUND");
-    }
-
-    private static void TryPatchKeyViewer(Harmony harmony)
-    {
-        var kvType = AccessTools.TypeByName("JipperKeyViewer.KeyViewer.KeyViewer");
-        if (kvType == null) return;
-        var m = AccessTools.Method(kvType, "ProcessKeySelection");
-        if (m == null) return;
-        harmony.Patch(m, prefix: new HarmonyMethod(typeof(GamePatches), nameof(KvProcessKeySelPrefix)));
-        Main.Mod.Logger.Log("Patched: KeyViewer.ProcessKeySelection (Alt/Win fix)");
     }
 
     // ---- 修补 RDInputType_Keyboard.CheckKeyState（只针对特定键，Escape 跳过） ----
@@ -309,27 +299,6 @@ internal static class GamePatches
             return (int)label == 12;
         }
         catch { return false; }
-    }
-
-    // ======================= KeyViewer 兼容 =======================
-    private static bool KvProcessKeySelPrefix(object __instance, int ___SelectedKey, int ___changeState)
-    {
-        if (___SelectedKey == -1 || ___changeState == 1 || !Application.isFocused)
-            return true;
-
-        if (Input.GetKeyDown(KeyCode.LeftAlt)) { CallSetupKey(__instance, KeyCode.LeftAlt); return false; }
-        if (Input.GetKeyDown(KeyCode.RightAlt)) { CallSetupKey(__instance, KeyCode.RightAlt); return false; }
-
-        if (KeyboardHook.IsKeyPhysicallyDown(VK_LWIN)) { CallSetupKey(__instance, KeyCode.LeftWindows); return false; }
-        if (KeyboardHook.IsKeyPhysicallyDown(VK_RWIN)) { CallSetupKey(__instance, KeyCode.RightWindows); return false; }
-
-        return true;
-    }
-
-    private static void CallSetupKey(object instance, KeyCode key)
-    {
-        var m = AccessTools.Method(instance.GetType(), "SetupKey", new[] { typeof(KeyCode) });
-        try { m?.Invoke(instance, new object[] { key }); } catch { }
     }
 
     // ======================= 常量 =======================
