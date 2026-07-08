@@ -1,0 +1,10 @@
+{
+  "Id": "AllowSpecialKeys",
+  "DisplayName": "Allow Special Keys",
+  "Author": "HitMargin",
+  "Version": "1.0.0",
+  "Requirements": [],
+  "AssemblyName": "AllowSpecialKeys.dll",
+  "EntryMethod": "AllowSpecialKeys.Main.Load",
+  "HomePage": ""
+}

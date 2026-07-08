@@ -1,0 +1,14 @@
+## Build outputs
+bin/
+obj/
+*.user
+*.suo
+*.sln.docstates
+
+## IDE
+.vs/
+*.csproj.user
+
+## OS
+Thumbs.db
+.DS_Store
