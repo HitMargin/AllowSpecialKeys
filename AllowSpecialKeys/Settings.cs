@@ -10,9 +10,9 @@ public class Settings
 {
     public bool BlockWinKey = true;
     public bool BlockAltTab = true;
-    public bool BlockAltEnter = false;
-    public bool BlockCtrlEsc = true;
-    public bool AllowSpecialAsGameplay = false;
+    public bool BlockAltEnter = true;
+    public bool BlockCtrlEsc = false;
+    public bool AllowSpecialAsGameplay = true;
     public bool AllowF12AsGameplay = false;
     public int Language; // 0=中文, 1=English, 2=한국어
 
