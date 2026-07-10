@@ -2,7 +2,7 @@
   "Id": "AllowSpecialKeys",
   "DisplayName": "Allow Special Keys",
   "Author": "HitMargin",
-  "Version": "0.0.1",
+  "Version": "0.0.2",
   "Requirements": [],
   "AssemblyName": "AllowSpecialKeys.dll",
   "EntryMethod": "AllowSpecialKeys.Main.Load",
