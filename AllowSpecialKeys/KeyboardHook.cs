@@ -71,8 +71,6 @@ public class KeyboardHook : IDisposable
     // never see a key we've blocked.
     private static readonly bool[] _keyPhysicallyDown = new bool[256];
 
-    public static volatile bool IsGameFocused = true;
-
     /// <summary>
     /// Returns whether the given virtual-key code is currently physically
     /// held down, as observed directly by this hook. Safe to call from any
@@ -82,12 +80,6 @@ public class KeyboardHook : IDisposable
     {
         if (vkCode < 0 || vkCode >= _keyPhysicallyDown.Length) return false;
         return Volatile.Read(ref _keyPhysicallyDown[vkCode]);
-    }
-
-    public static void ClearPhysicalState()
-    {
-        for (int i = 0; i < _keyPhysicallyDown.Length; i++)
-            Volatile.Write(ref _keyPhysicallyDown[i], false);
     }
 
     static KeyboardHook()
@@ -184,7 +176,7 @@ public class KeyboardHook : IDisposable
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && IsGameFocused)
+        if (nCode >= 0)
         {
             int msg = wParam.ToInt32();
             bool isDown = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;

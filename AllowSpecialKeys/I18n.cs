@@ -13,12 +13,8 @@ internal static class I18n
             "拦截 Alt+Enter（全屏切换）",
             "拦截 Ctrl+Esc",
             "=== 游戏内 ===",
-            "允许特殊键作为游戏按键（总开关）",
-            "允许 Win 键",
-            "允许 Tab 键",
-            "允许 Enter 键",
-            "允许 F4 键",
-            "允许 F12 键",
+            "允许特殊键作为游戏按键（Win/Alt/Ctrl... 游戏中可用）",
+            "允许 F12 作为游戏按键",
             "应用",
             "中文", "English", "한국어",
         },
@@ -30,12 +26,8 @@ internal static class I18n
             "Block Alt+Enter (fullscreen toggle)",
             "Block Ctrl+Esc",
             "=== Gameplay ===",
-            "Allow special keys as gameplay keys (master)",
-            "Allow Win key",
-            "Allow Tab key",
-            "Allow Enter key",
-            "Allow F4 key",
-            "Allow F12 key",
+            "Allow special keys as gameplay keys (Win/Alt/Ctrl... in-game)",
+            "Allow F12 as gameplay key",
             "Apply",
             "中文", "English", "한국어",
         },
@@ -47,34 +39,26 @@ internal static class I18n
             "Alt+Enter 차단 (전체화면 전환)",
             "Ctrl+Esc 차단",
             "=== 게임플레이 ===",
-            "특수 키를 게임 키로 허용 (마스터)",
-            "Win 키 허용",
-            "Tab 키 허용",
-            "Enter 키 허용",
-            "F4 키 허용",
-            "F12 키 허용",
+            "특수 키를 게임 키로 허용 (Win/Alt/Ctrl...)",
+            "F12를 게임 키로 허용",
             "적용",
             "中文", "English", "한국어",
         },
     };
 
-    public const int T_TITLE = 0;
-    public const int T_OS_HEADER = 1;
-    public const int T_BLOCK_WIN = 2;
+    public const int T_TITLE        = 0;
+    public const int T_OS_HEADER    = 1;
+    public const int T_BLOCK_WIN    = 2;
     public const int T_BLOCK_ALT_TAB = 3;
     public const int T_BLOCK_ALT_ENTER = 4;
     public const int T_BLOCK_CTRL_ESC = 5;
-    public const int T_GAME_HEADER = 6;
+    public const int T_GAME_HEADER  = 6;
     public const int T_SPECIAL_KEYS = 7;
-    public const int T_ALLOW_WIN = 8;
-    public const int T_ALLOW_TAB = 9;
-    public const int T_ALLOW_ENTER = 10;
-    public const int T_ALLOW_F4 = 11;
-    public const int T_ALLOW_F12 = 12;
-    public const int T_APPLY = 13;
-    public const int T_LANG_ZH = 14;
-    public const int T_LANG_EN = 15;
-    public const int T_LANG_KO = 16;
+    public const int T_F12_KEY      = 8;
+    public const int T_APPLY        = 9;
+    public const int T_LANG_ZH      = 10;
+    public const int T_LANG_EN      = 11;
+    public const int T_LANG_KO      = 12;
 
     public static string Get(int lang, int key) => Texts[lang][key];
 }
