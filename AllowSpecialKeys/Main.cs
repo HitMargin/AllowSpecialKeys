@@ -116,8 +116,18 @@ public static class Main
         Settings.AllowSpecialAsGameplay = GUILayout.Toggle(
             Settings.AllowSpecialAsGameplay, T(I18n.T_SPECIAL_KEYS));
         if (Settings.AllowSpecialAsGameplay)
+        {
+            Settings.AllowWinKeyAsGameplay = GUILayout.Toggle(
+                Settings.AllowWinKeyAsGameplay, T(I18n.T_ALLOW_WIN));
+            Settings.AllowTabAsGameplay = GUILayout.Toggle(
+                Settings.AllowTabAsGameplay, T(I18n.T_ALLOW_TAB));
+            Settings.AllowEnterAsGameplay = GUILayout.Toggle(
+                Settings.AllowEnterAsGameplay, T(I18n.T_ALLOW_ENTER));
+            Settings.AllowF4AsGameplay = GUILayout.Toggle(
+                Settings.AllowF4AsGameplay, T(I18n.T_ALLOW_F4));
             Settings.AllowF12AsGameplay = GUILayout.Toggle(
-                Settings.AllowF12AsGameplay, T(I18n.T_F12_KEY));
+                Settings.AllowF12AsGameplay, T(I18n.T_ALLOW_F12));
+        }
 
         GUILayout.Space(10);
 
@@ -159,6 +169,8 @@ public static class Main
         private void Update()
         {
             bool focused = Application.isFocused;
+            KeyboardHook.IsGameFocused = focused;
+
             if (focused != _wasFocused && focused)
             {
                 _wasFocused = true;
@@ -168,9 +180,10 @@ public static class Main
                     Main.RestartMod();
                 }
             }
-            else
+            else if (focused != _wasFocused && !focused)
             {
-                _wasFocused = focused;
+                _wasFocused = false;
+                KeyboardHook.ClearPhysicalState();
             }
         }
     }

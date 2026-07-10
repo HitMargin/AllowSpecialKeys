@@ -13,6 +13,10 @@ public class Settings
     public bool BlockAltEnter = true;
     public bool BlockCtrlEsc = false;
     public bool AllowSpecialAsGameplay = true;
+    public bool AllowWinKeyAsGameplay = true;
+    public bool AllowTabAsGameplay = true;
+    public bool AllowEnterAsGameplay = true;
+    public bool AllowF4AsGameplay = true;
     public bool AllowF12AsGameplay = false;
     public int Language; // 0=中文, 1=English, 2=한국어
 
