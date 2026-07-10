@@ -12,15 +12,6 @@ internal static class GamePatches
 
     private static bool _patchesApplied;
     private static FieldInfo _asyncLabelField;
-    private static bool _specialKeysLogged;
-
-    // KeyLabel 常量（F12=12 已确认，其余待日志确认后填入）
-    private const int _LABEL_F12 = 12;
-    private const int _LABEL_TAB = -1;
-    private const int _LABEL_RETURN = -1;
-    private const int _LABEL_F4 = -1;
-    private const int _LABEL_LWIN = -1;
-    private const int _LABEL_RWIN = -1;
 
     // ---- 物理键跟踪（只跟踪需要修复的键，不包括 Escape） ----
     private static int _lastSampleFrame = -1;
@@ -136,65 +127,17 @@ internal static class GamePatches
 
     private static void GetSpecialInputPostfix(ref List<AsyncKeyCode> __result)
     {
-        if (_asyncLabelField == null) return;
-
-        if (!_specialKeysLogged)
-        {
-            _specialKeysLogged = true;
-            foreach (var akc in __result)
-            {
-                try
-                {
-                    var label = (KeyLabel)_asyncLabelField.GetValue(akc);
-                    Main.Mod.Logger.Log($"[GetSpecialInput] label={(int)label} raw={label}");
-                }
-                catch { }
-            }
-        }
-
         if (!Main.Settings.AllowSpecialAsGameplay) return;
 
-        var filtered = new List<AsyncKeyCode>();
-
-        foreach (var akc in __result)
+        // 重新构建特殊列表：只包含 Escape，以及（当不允许 F12 时）F12
+        var newList = new List<AsyncKeyCode>
         {
-            try
-            {
-                var label = (KeyLabel)_asyncLabelField.GetValue(akc);
-                int labelInt = (int)label;
+            new AsyncKeyCode(KeyLabel.Escape)
+        };
+        if (!Main.Settings.AllowF12AsGameplay)
+            newList.Add(new AsyncKeyCode(KeyLabel.F12));
 
-                bool shouldRemove = ShouldRemoveFromSpecial(labelInt);
-
-                if (!shouldRemove)
-                    filtered.Add(akc);
-            }
-            catch
-            {
-                filtered.Add(akc);
-            }
-        }
-
-        __result = filtered;
-    }
-
-    private static bool ShouldRemoveFromSpecial(int labelInt)
-    {
-        if (labelInt == _LABEL_F12 && Main.Settings.AllowF12AsGameplay)
-            return true;
-        if (IsWinKeyLabel(labelInt) && Main.Settings.AllowWinKeyAsGameplay)
-            return true;
-        if (labelInt == _LABEL_TAB && Main.Settings.AllowTabAsGameplay)
-            return true;
-        if (labelInt == _LABEL_RETURN && Main.Settings.AllowEnterAsGameplay)
-            return true;
-        if (labelInt == _LABEL_F4 && Main.Settings.AllowF4AsGameplay)
-            return true;
-        return false;
-    }
-
-    private static bool IsWinKeyLabel(int labelInt)
-    {
-        return labelInt == _LABEL_LWIN || labelInt == _LABEL_RWIN;
+        __result = newList;
     }
 
     // 补丁 2：AsyncKeyboard.Main 后置 (F12)
@@ -233,22 +176,11 @@ internal static class GamePatches
         };
         if (!Main.Settings.AllowF12AsGameplay)
             newList.Add(KeyCode.F12);
-        if (!Main.Settings.AllowWinKeyAsGameplay)
-        {
-            newList.Add(KeyCode.LeftWindows);
-            newList.Add(KeyCode.RightWindows);
-        }
-        if (!Main.Settings.AllowTabAsGameplay)
-            newList.Add(KeyCode.Tab);
-        if (!Main.Settings.AllowEnterAsGameplay)
-            newList.Add(KeyCode.Return);
-        if (!Main.Settings.AllowF4AsGameplay)
-            newList.Add(KeyCode.F4);
 
         __result = newList;
     }
 
-    // 补丁 4：Keyboard.MainIgnoreActive 后置（注入特殊键）
+    // 补丁 4：Keyboard.MainIgnoreActive 后置（注入 Win 键）
     private static void KeyboardMainPostfix(RDInputType_Keyboard __instance, ButtonState state, ref int __result)
     {
         if (!Main.Settings.AllowSpecialAsGameplay) return;
@@ -267,17 +199,8 @@ internal static class GamePatches
 
         var keys = stateCount.keys;
         DedupeAltGr(keys, ref __result);
-        if (Main.Settings.AllowWinKeyAsGameplay)
-        {
-            TryAddKey(keys, VK_LWIN, KeyCode.LeftWindows, state, ref __result);
-            TryAddKey(keys, VK_RWIN, KeyCode.RightWindows, state, ref __result);
-        }
-        if (Main.Settings.AllowTabAsGameplay)
-            TryAddKey(keys, VK_TAB, KeyCode.Tab, state, ref __result);
-        if (Main.Settings.AllowEnterAsGameplay)
-            TryAddKey(keys, VK_RETURN, KeyCode.Return, state, ref __result);
-        if (Main.Settings.AllowF4AsGameplay)
-            TryAddKey(keys, VK_F4, KeyCode.F4, state, ref __result);
+        TryAddKey(keys, VK_LWIN, KeyCode.LeftWindows, state, ref __result);
+        TryAddKey(keys, VK_RWIN, KeyCode.RightWindows, state, ref __result);
     }
 
     private static void DedupeAltGr(List<AnyKeyCode> keys, ref int result)
@@ -323,17 +246,16 @@ internal static class GamePatches
     // ======================= ★ CheckKeyState 前缀（只处理特定键，Escape 不干预） =======================
     private static bool KeyboardCheckKeyStatePrefix(KeyCode key, ButtonState state, ref bool __result)
     {
+        // 如果是 Escape，直接跳过，让原始逻辑执行（我们不干预）
         if (key == KeyCode.Escape)
-            return true;
+            return true;   // 执行原方法
 
+        // 对于其他键，如果需要修正物理状态，则处理
         if (!Main.Settings.AllowSpecialAsGameplay)
-            return true;
-
-        if (!IsKeyAllowedAsGameplay(key))
-            return true;
+            return true;   // 不修正
 
         int vk = KeyCodeToVk(key);
-        if (vk == -1) return true;
+        if (vk == -1) return true;  // 不在修复列表
 
         SampleSpecialKeysOncePerFrame();
 
@@ -350,20 +272,7 @@ internal static class GamePatches
         };
 
         __result = result;
-        return false;
-    }
-
-    private static bool IsKeyAllowedAsGameplay(KeyCode key)
-    {
-        return key switch
-        {
-            KeyCode.LeftWindows => Main.Settings.AllowWinKeyAsGameplay,
-            KeyCode.RightWindows => Main.Settings.AllowWinKeyAsGameplay,
-            KeyCode.Return => Main.Settings.AllowEnterAsGameplay,
-            KeyCode.Tab => Main.Settings.AllowTabAsGameplay,
-            KeyCode.F4 => Main.Settings.AllowF4AsGameplay,
-            _ => false
-        };
+        return false; // 跳过原方法，使用我们的结果
     }
 
     // ======================= 辅助函数 =======================
